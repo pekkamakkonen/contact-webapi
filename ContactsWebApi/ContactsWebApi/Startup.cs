@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using ContactsWebApi.Models;
 using ContactsWebApi.Repositories;
 using ContactsWebApi.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 namespace ContactsWebApi
 {
@@ -27,13 +28,31 @@ namespace ContactsWebApi
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            services.Configure<AzureSettings>(Configuration.GetSection("AzureSettings"));
+            services.AddScoped<IAuthenticationService, AuthenticationService>();
             services.AddScoped<IContactService, ContactService>();
             services.AddScoped<IContactRepository, ContactRepository>();
             services.AddDbContext<ContactsDbContext>(options => {
-                options.UseSqlServer(Configuration["LocalDbConnection"]);
+                options.UseSqlServer(Configuration["ContactsDbAdminConnection"]);
             });
+            services.AddCors(options => options.AddPolicy("AllowAnyPolicy", builder => { builder.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader(); }));
+
+            // Configure Authentication
+            services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+                .AddJwtBearer(options =>
+                {
+                    options.Audience = Configuration["AzureSettings:ApplicationId"];
+                    options.Authority = Configuration["AzureSettings:LoginUrl"] + Configuration["AzureSettings:DirectoryId"];
+                });
+
             services.AddMvc();
         }
+
+
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IHostingEnvironment env)
@@ -42,6 +61,9 @@ namespace ContactsWebApi
             {
                 app.UseDeveloperExceptionPage();
             }
+
+            app.UseCors("AllowAnyPolicy");
+            app.UseAuthentication();
 
             app.UseMvc();
         }
